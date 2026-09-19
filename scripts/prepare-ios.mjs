@@ -175,34 +175,33 @@ function patchAppIcon() {
 }
 
 /**
- * 4) 确保 Podfile 的 iOS 部署版本明确。
+ * 4) Podfile 平台设置 —— 仅当使用 CocoaPods 时才需要。
  *
- * Capacitor 生成的 Podfile 里平台版本可能被注释掉，
- * 导致 CocoaPods 回退到默认值，与 Xcode 的 SDK 版本不匹配时，
- * pod install 会报错或产生大量警告（在 CI 上表现为构建失败）。
- * 这里显式设置为 14.0 —— 覆盖 iPhone 6s 以后的机型，够用且稳妥。
+ * 重要：Capacitor 8 已改用 **Swift Package Manager**，
+ * `cap sync ios` 会输出 "All Capacitor plugins have a Package.swift file"，
+ * 并且**不生成 Podfile**。所以这里不再强制要求 Podfile 存在，
+ * 没有就安静跳过（早期版本误判为警告，且工作流里还跑了 pod install，
+ * 导致报 "No Podfile found in the project directory" 而构建失败）。
  */
 function ensurePodfilePlatform() {
   const podfile = join(ROOT, 'ios', 'App', 'Podfile');
   if (!existsSync(podfile)) {
-    log('⚠ 找不到 ios/App/Podfile，跳过平台设置');
+    log('· 未发现 Podfile → Capacitor 8 使用 SPM，无需 CocoaPods，跳过');
     return;
   }
 
   let s = readFileSync(podfile, 'utf8');
   const before = s;
 
-  // 匹配被注释或已存在的 platform 行
   if (/^\s*#?\s*platform\s+:ios/m.test(s)) {
     s = s.replace(/^\s*#?\s*platform\s+:ios.*$/m, "platform :ios, '14.0'");
   } else {
-    // 没有就插到第一行非注释处
     s = s.replace(/^(require|source|target)/m, "platform :ios, '14.0'\n$1");
   }
 
   if (s !== before) {
     writeFileSync(podfile, s);
-    log("✓ 已设置 Podfile 平台为 iOS 14.0");
+    log('✓ 已设置 Podfile 平台为 iOS 14.0');
   } else {
     log('✓ Podfile 平台已就绪');
   }
