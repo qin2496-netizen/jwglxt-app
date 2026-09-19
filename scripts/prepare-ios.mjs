@@ -174,6 +174,40 @@ function patchAppIcon() {
   log('✓ 已替换 App 图标');
 }
 
+/**
+ * 4) 确保 Podfile 的 iOS 部署版本明确。
+ *
+ * Capacitor 生成的 Podfile 里平台版本可能被注释掉，
+ * 导致 CocoaPods 回退到默认值，与 Xcode 的 SDK 版本不匹配时，
+ * pod install 会报错或产生大量警告（在 CI 上表现为构建失败）。
+ * 这里显式设置为 14.0 —— 覆盖 iPhone 6s 以后的机型，够用且稳妥。
+ */
+function ensurePodfilePlatform() {
+  const podfile = join(ROOT, 'ios', 'App', 'Podfile');
+  if (!existsSync(podfile)) {
+    log('⚠ 找不到 ios/App/Podfile，跳过平台设置');
+    return;
+  }
+
+  let s = readFileSync(podfile, 'utf8');
+  const before = s;
+
+  // 匹配被注释或已存在的 platform 行
+  if (/^\s*#?\s*platform\s+:ios/m.test(s)) {
+    s = s.replace(/^\s*#?\s*platform\s+:ios.*$/m, "platform :ios, '14.0'");
+  } else {
+    // 没有就插到第一行非注释处
+    s = s.replace(/^(require|source|target)/m, "platform :ios, '14.0'\n$1");
+  }
+
+  if (s !== before) {
+    writeFileSync(podfile, s);
+    log("✓ 已设置 Podfile 平台为 iOS 14.0");
+  } else {
+    log('✓ Podfile 平台已就绪');
+  }
+}
+
 function main() {
   // 被当作模块导入（单测）时不要执行主流程
   if (process.argv[1] && !process.argv[1].endsWith('prepare-ios.mjs')) return;
@@ -191,6 +225,7 @@ function main() {
   ensureIosProject();
   patchInfoPlist();
   patchAppIcon();
+  ensurePodfilePlatform();
   log('\n✓ iOS 工程准备完成');
   log('  下一步：cd ios/App && pod install && open App.xcworkspace');
 }

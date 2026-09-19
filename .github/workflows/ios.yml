@@ -78,13 +78,48 @@ jobs:
       - name: 准备 iOS 工程（cap add ios + ATS 例外 + 图标）
         run: node scripts/prepare-ios.mjs
 
+      # 确保 CocoaPods 可用。
+      # macos-14 runner 上 CocoaPods 并非总是预装（首次运行即因缺少 pod 命令失败，
+      # 报 "pod: command not found"）。这里显式安装，并选择受支持的 Ruby 版本。
+      - name: 安装 CocoaPods
+        run: |
+          set -e
+          echo "--- 当前 Ruby / gem 环境 ---"
+          ruby -v || true
+          gem -v || true
+          which pod && pod --version || echo "pod 未安装，开始安装"
+
+          # 优先用 Gemfile（如果仓库提供了），否则直接 gem install
+          if [ -f Gemfile ]; then
+            bundle install
+            bundle exec pod --version
+          else
+            # 加 --user-install 避免权限问题；gem 在 runner 上通常有权限直接装
+            gem install cocoapods --no-document || sudo gem install cocoapods --no-document
+            pod --version
+          fi
+          echo "✓ CocoaPods 就绪"
+
       - name: 同步网页资源到 iOS 工程
         run: npx cap sync ios
 
       - name: 安装 CocoaPods 依赖
         working-directory: ios/App
         run: |
-          pod install --repo-update
+          set -e
+          # 不用 --repo-update：那会强制更新整个 CDN 索引，首次要跑很久且容易超时。
+          # Capacitor 的 Podfile 只用官方 Specs，直接 install 即可按需拉取。
+          #
+          # 注意：这里不能用 `pod install | tail`，管道会吃掉退出码导致失败被漏掉。
+          # 改为写日志文件，失败时打印尾部。
+          if pod install > /tmp/pod.log 2>&1; then
+            tail -25 /tmp/pod.log
+          else
+            echo "✗ pod install 失败，完整日志："
+            cat /tmp/pod.log
+            exit 1
+          fi
+          echo "--- 检查 workspace 是否生成 ---"
           ls -la App.xcworkspace
 
       # 直接用 xcodebuild 输出，不用 xcpretty：
