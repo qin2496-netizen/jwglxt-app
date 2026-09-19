@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>教务系统</title>
+  <style>
+    html, body { height: 100%; margin: 0; }
+    body {
+      display: flex; align-items: center; justify-content: center;
+      font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+      background: #f5f7fa; color: #33415c;
+    }
+    .box { text-align: center; padding: 24px; }
+    .spin {
+      width: 34px; height: 34px; margin: 0 auto 18px;
+      border: 3px solid #d3dced; border-top-color: #1e5eb8;
+      border-radius: 50%; animation: r 0.9s linear infinite;
+    }
+    @keyframes r { to { transform: rotate(360deg); } }
+    .tip { font-size: 15px; line-height: 1.7; }
+    .hint { font-size: 13px; color: #8a94a6; margin-top: 10px; }
+  </style>
+</head>
+<body>
+  <!--
+    占位页：正常运行时 Capacitor 会直接把 WebView 指向远程教务系统，
+    用户看不到这一页。只有在远程地址打不开（断网 / 服务器挂了）时才会停留在此。
+  -->
+  <div class="box">
+    <div class="spin"></div>
+    <div class="tip">正在打开教务系统…</div>
+    <div class="hint">若长时间无响应，请检查网络连接</div>
+  </div>
+  <script>
+    // 兜底：万一 Capacitor 没有跳转（例如配置异常），这里主动跳一次
+    setTimeout(function () {
+      var target = 'http://113.200.156.241/jwglxt/xtgl/index_initMenu.html';
+      if (!/113\.200\.156\.241/.test(location.href)) {
+        location.replace(target);
+      }
+    }, 1500);
+  </script>
+</body>
+</html>

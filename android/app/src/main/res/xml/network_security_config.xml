@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  教务系统只有 HTTP、没有 HTTPS。
+  Android 9（API 28）起默认禁止 App 加载明文 HTTP 流量，
+  不配这个文件的话 WebView 会直接报错、页面白屏。
+
+  这里只对本校教务系统域名放行明文，其它域名仍然强制 HTTPS，
+  避免整体 cleartextTrafficPermitted="true" 带来的安全面扩大。
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="true">113.200.156.241</domain>
+    </domain-config>
+</network-security-config>

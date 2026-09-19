@@ -1,0 +1,36 @@
+{
+	"appId": "com.jwglxt.shell",
+	"appName": "教务系统",
+	"webDir": "www",
+	"server": {
+		"url": "http://113.200.156.241/jwglxt/xtgl/index_initMenu.html",
+		"cleartext": true,
+		"androidScheme": "http",
+		"iosScheme": "http",
+		"allowNavigation": [
+			"113.200.156.241"
+		]
+	},
+	"android": {
+		"allowMixedContent": true,
+		"backgroundColor": "#ffffff"
+	},
+	"ios": {
+		"contentInset": "automatic",
+		"backgroundColor": "#ffffff"
+	},
+	"plugins": {
+		"SplashScreen": {
+			"launchShowDuration": 1200,
+			"backgroundColor": "#1e5eb8",
+			"showSpinner": false,
+			"androidScaleType": "CENTER_CROP",
+			"splashFullScreen": true,
+			"splashImmersive": false
+		},
+		"StatusBar": {
+			"style": "DARK",
+			"backgroundColor": "#1e5eb8"
+		}
+	}
+}

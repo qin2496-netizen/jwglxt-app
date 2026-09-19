@@ -1,0 +1,63 @@
+// Top-level build file where you can add configuration options common to all sub-projects/modules.
+
+buildscript {
+    
+    repositories {
+        google()
+        mavenCentral()
+    }
+    dependencies {
+        classpath 'com.android.tools.build:gradle:8.13.0'
+        classpath 'com.google.gms:google-services:4.4.4'
+
+        // NOTE: Do not place your application dependencies here; they belong
+        // in the individual module build.gradle files
+    }
+}
+
+apply from: "variables.gradle"
+
+allprojects {
+    repositories {
+        google()
+        mavenCentral()
+    }
+}
+
+// ===========================================================================
+// 全局统一各子模块的 Java 版本与 Build Tools 版本
+// ---------------------------------------------------------------------------
+// 为什么必须放在根 build.gradle：
+//   Capacitor 的 :capacitor-android、:capacitor-app 等模块各自带一份 build.gradle，
+//   里面硬编码 sourceCompatibility = JavaVersion.VERSION_21，且不指定 buildToolsVersion。
+//   本机只有 JDK 17（编译 Java 21 源码会报「无效的源发行版：21」），
+//   Build Tools 也只有 34.0.0 与 36.0.0（AGP 默认想用的 35.0.0 并不存在）。
+//   在 app 模块里改只能管到 app，管不到这些 library 模块，
+//   所以这里在 allprojects 层面统一覆盖。
+// ===========================================================================
+subprojects {
+    afterEvaluate { project ->
+        if (project.hasProperty('android')) {
+            project.android {
+                // 统一 Build Tools（本机已有版本）
+                buildToolsVersion = "36.0.0"
+
+                compileOptions {
+                    sourceCompatibility JavaVersion.VERSION_17
+                    targetCompatibility JavaVersion.VERSION_17
+                }
+            }
+        }
+
+        // 顺带压掉 Kotlin 1.8.22 与被传递依赖带入的 1.6.21 之间的
+        // "Duplicate class kotlin.io.path.*" 冲突
+        project.configurations.all {
+            exclude group: 'org.jetbrains.kotlin', module: 'kotlin-stdlib-jdk7'
+            exclude group: 'org.jetbrains.kotlin', module: 'kotlin-stdlib-jdk8'
+        }
+    }
+}
+
+task clean(type: Delete) {
+    delete rootProject.buildDir
+}

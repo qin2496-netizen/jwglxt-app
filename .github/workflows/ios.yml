@@ -1,0 +1,148 @@
+name: Build iOS App (IPA)
+
+# =============================================================================
+# 为什么需要这个工作流
+# -----------------------------------------------------------------------------
+# 编译 iOS 必须用 macOS + Xcode，而开发机是 Windows，
+# Windows 上没有任何办法本地出 iOS 包（苹果的设计，不是缺工具）。
+# GitHub Actions 提供免费的 macOS 运行器，可在云端完成构建。
+#
+# 本工作流做什么
+# -----------------------------------------------------------------------------
+#   1. 生成 iOS 原生工程（cap add ios）
+#   2. 写入 ATS 例外 —— 站点是纯 HTTP，不配这个 iOS 会直接拒绝加载、白屏
+#   3. pod install 并构建
+#   4. 产出未签名 IPA 作为 artifact
+#
+# ⚠️ 关于产物的三个硬事实
+# -----------------------------------------------------------------------------
+#   1. 未签名 IPA 装不到 iPhone 上。要安装还需苹果签名，途径：
+#        a) 苹果开发者账号（$99/年）+ 证书与描述文件
+#        b) 免费 Apple ID + Sideloadly / AltStore 自签（7 天有效期）
+#        c) 借一台 Mac 用 Xcode 直接 Run（免费 Apple ID 也能装，同样 7 天）
+#   2. 苹果审核指南 4.2 规定「纯网页套壳的 App」会被拒，
+#      因此本包基本不可能上架 App Store。自用/小范围分发可行。
+#   3. 若配置了签名 secrets，把「签名构建」那一段打开即可出可直接安装的 IPA。
+# =============================================================================
+
+on:
+  push:
+    branches: [main, master]
+    paths:
+      - 'ios/**'
+      - 'www/**'
+      - 'assets/**'
+      - 'capacitor.config*.ts'
+      - 'scripts/prepare-ios.mjs'
+      - 'scripts/make-icons.mjs'
+      - 'package.json'
+      - '.github/workflows/ios.yml'
+  workflow_dispatch: # 支持在 Actions 页面手动触发
+
+# 同一分支只跑一个，避免重复构建
+concurrency:
+  group: ios-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-ios:
+    name: 构建 iOS（未签名 IPA）
+    runs-on: macos-14
+    timeout-minutes: 40
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 安装 Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      # 注意：不要加 --ignore-scripts。
+      # Capacitor 的部分依赖靠 postinstall 准备文件，
+      # 跳过会导致 cap add ios 缺东西而失败。
+      - name: 安装项目依赖
+        run: |
+          if [ -f package-lock.json ]; then
+            npm ci
+          else
+            npm install
+          fi
+
+      - name: 检查 plist 补丁逻辑（快速失败）
+        run: node scripts/test-ios-plist.mjs
+
+      # 生成 ios/ 目录并写入 ATS 例外（站点是 HTTP，必需）
+      - name: 准备 iOS 工程（cap add ios + ATS 例外 + 图标）
+        run: node scripts/prepare-ios.mjs
+
+      - name: 同步网页资源到 iOS 工程
+        run: npx cap sync ios
+
+      - name: 安装 CocoaPods 依赖
+        working-directory: ios/App
+        run: |
+          pod install --repo-update
+          ls -la App.xcworkspace
+
+      # 直接用 xcodebuild 输出，不用 xcpretty：
+      # 之前写成 `xcodebuild | xcpretty || xcodebuild`，
+      # 在 set -o pipefail 下会因管道返回码判断失误而重复构建一次，浪费近十分钟。
+      - name: 构建（未签名 archive）
+        working-directory: ios/App
+        run: |
+          xcodebuild \
+            -workspace App.xcworkspace \
+            -scheme App \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -archivePath "$RUNNER_TEMP/App.xcarchive" \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            archive
+
+      - name: 打包为未签名 IPA
+        run: |
+          APP_PATH="$RUNNER_TEMP/App.xcarchive/Products/Applications/App.app"
+          if [ ! -d "$APP_PATH" ]; then
+            echo "找不到构建产物：$APP_PATH"
+            ls -R "$RUNNER_TEMP/App.xcarchive/Products" || true
+            exit 1
+          fi
+          mkdir -p "$RUNNER_TEMP/Payload"
+          cp -R "$APP_PATH" "$RUNNER_TEMP/Payload/"
+          cd "$RUNNER_TEMP"
+          zip -qry jwglxt-unsigned.ipa Payload
+          ls -lh jwglxt-unsigned.ipa
+
+      # 顺手校验：把 ATS 配置从产物里读出来，确认没漏
+      - name: 校验产物里的 ATS 配置
+        run: |
+          PLIST="$RUNNER_TEMP/App.xcarchive/Products/Applications/App.app/Info.plist"
+          echo "--- 检查 ATS 例外是否真的进了 App ---"
+          /usr/libexec/PlistBuddy -c "Print :NSAppTransportSecurity" "$PLIST" \
+            || { echo "✗ 产物里没有 ATS 例外，装上去会白屏"; exit 1; }
+          echo "--- 检查应用名 ---"
+          /usr/libexec/PlistBuddy -c "Print :CFBundleDisplayName" "$PLIST"
+
+      - name: 上传 IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-unsigned-ipa
+          path: ${{ runner.temp }}/jwglxt-unsigned.ipa
+          retention-days: 30
+
+      - name: 上传构建日志（失败时排查用）
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-build-logs
+          path: |
+            ios/App/build
+            ~/Library/Logs/xcodebuild
+          retention-days: 7
+          if-no-files-found: ignore
