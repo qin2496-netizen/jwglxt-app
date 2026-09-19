@@ -207,10 +207,71 @@ function ensurePodfilePlatform() {
   }
 }
 
+/**
+ * 同步后修正：重新写入应用名与 ATS 例外。
+ *
+ * 为什么需要单独一步：
+ *   `cap add ios` 生成工程时应用名是正确的，但**紧接着的 `cap sync ios`
+ *   会重新生成 Info.plist，把 CFBundleDisplayName 覆盖成目录名 "App"**。
+ *   实测产物里 CFBundleDisplayName = "App"，装到 iPhone 上桌面图标就叫 "App"，
+ *   而不是「教务系统」。
+ *   因此必须在 sync 之后再补一次，并校验结果。
+ */
+export function fixAfterSync() {
+  log('=== 同步后修正（应用名 + ATS）===');
+  patchInfoPlist();
+  patchAppIcon();
+  verifyInfoPlist();
+}
+
+/**
+ * 校验 Info.plist 的关键字段是否正确写入。
+ * 这是构建前的最后一道关，避免带着 "App" 这种名字或缺失 ATS 的包发出去。
+ */
+function verifyInfoPlist() {
+  if (!existsSync(INFO_PLIST)) {
+    throw new Error(`找不到 ${INFO_PLIST}`);
+  }
+  const s = readFileSync(INFO_PLIST, 'utf8');
+  const problems = [];
+
+  const nameMatch = s.match(/<key>CFBundleDisplayName<\/key>\s*<string>([^<]*)<\/string>/);
+  if (!nameMatch) {
+    problems.push('缺少 CFBundleDisplayName');
+  } else if (nameMatch[1] !== APP_DISPLAY_NAME) {
+    problems.push(`CFBundleDisplayName 为「${nameMatch[1]}」，期望「${APP_DISPLAY_NAME}」`);
+  }
+
+  if (!/NSAppTransportSecurity/.test(s)) problems.push('缺少 NSAppTransportSecurity');
+  if (!/NSAllowsArbitraryLoadsInWebContent/.test(s)) problems.push('缺少 NSAllowsArbitraryLoadsInWebContent');
+  if (!/NSExceptionAllowsInsecureHTTPLoads/.test(s)) problems.push('缺少 NSExceptionAllowsInsecureHTTPLoads');
+  if (!s.includes(SITE_HOST)) problems.push(`缺少域名例外 ${SITE_HOST}`);
+
+  if (problems.length) {
+    log('✗ Info.plist 校验未通过：');
+    problems.forEach((p) => log(`    - ${p}`));
+    process.exit(1);
+  }
+  log(`✓ Info.plist 校验通过（应用名「${APP_DISPLAY_NAME}」，ATS 例外完整）`);
+}
+
 function main() {
   // 被当作模块导入（单测）时不要执行主流程
   if (process.argv[1] && !process.argv[1].endsWith('prepare-ios.mjs')) return;
 
+  // --- 模式二：同步后修正（不依赖 macOS，只改文件）---
+  // 用法：node scripts/prepare-ios.mjs --after-sync
+  if (process.argv.includes('--after-sync')) {
+    if (!existsSync(join(ROOT, 'ios'))) {
+      log('✗ 找不到 ios/ 目录，请先执行 cap add ios');
+      process.exit(1);
+    }
+    fixAfterSync();
+    log('\n✓ 同步后修正完成');
+    return;
+  }
+
+  // --- 模式一：首次准备工程（需要 macOS）---
   if (process.platform !== 'darwin') {
     log('⚠ 当前不是 macOS，cap add ios 无法在非 Mac 上运行。');
     log('  请在 Mac 上执行本脚本，或使用 .github/workflows/ios.yml 云端构建。');
@@ -226,7 +287,7 @@ function main() {
   patchAppIcon();
   ensurePodfilePlatform();
   log('\n✓ iOS 工程准备完成');
-  log('  下一步：cd ios/App && pod install && open App.xcworkspace');
+  log('  下一步：npx cap sync ios && node scripts/prepare-ios.mjs --after-sync');
 }
 
 main();

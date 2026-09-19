@@ -82,6 +82,12 @@ jobs:
       - name: 同步网页资源到 iOS 工程（SPM 依赖在此解析）
         run: npx cap sync ios
 
+      # 关键：cap sync 会重新生成 Info.plist，把应用名冲回目录名 "App"。
+      # 必须在 sync 之后重新写入，否则装到 iPhone 上图标名字叫 "App" 而不是「教务系统」。
+      # 这一步同时会校验 ATS 例外确实写进去了（漏了就是白屏）。
+      - name: 同步后修正（应用名 + ATS）并校验
+        run: node scripts/prepare-ios.mjs --after-sync
+
       - name: 确认工程类型（SPM 用 xcodeproj，CocoaPods 才有 xcworkspace）
         working-directory: ios/App
         run: |
