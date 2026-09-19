@@ -12,16 +12,12 @@
   },
   "dependencies": {
     "@capacitor/android": "^8.5.2",
-    "@capacitor/app": "^8.0.0",
     "@capacitor/core": "^8.5.2",
-    "@capacitor/ios": "^8.5.2",
-    "@capacitor/splash-screen": "^8.0.0",
-    "@capacitor/status-bar": "^8.0.0",
-    "jszip": "^3.10.2"
+    "@capacitor/ios": "^8.5.2"
   },
   "devDependencies": {
     "@capacitor/cli": "^8.5.2",
     "sharp": "^0.35.4",
-    "typescript": "^7.0.2"
+    "typescript": "^5.9.3"
   }
 }

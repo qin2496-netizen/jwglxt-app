@@ -36,20 +36,26 @@ const config: CapacitorConfig = {
     contentInset: 'automatic',
     backgroundColor: '#ffffff',
   },
-  plugins: {
-    SplashScreen: {
-      launchShowDuration: 1200,
-      backgroundColor: '#1e5eb8',
-      showSpinner: false,
-      androidScaleType: 'CENTER_CROP',
-      splashFullScreen: true,
-      splashImmersive: false,
-    },
-    StatusBar: {
-      style: 'DARK',
-      backgroundColor: '#1e5eb8',
-    },
-  },
+
+  // ---------------------------------------------------------------------------
+  // 不配置任何 plugins —— 这是踩坑后的决定，原因如下：
+  //
+  // 最初配了 SplashScreen 与 StatusBar，但 iOS 云端构建失败，报：
+  //   error: value of type 'PluginConfig' has no member 'getString'
+  //   error: incorrect argument label in call (have 'fromHex:', expected 'argb:')
+  //
+  // 根因是 Capacitor 8 的插件走 Swift Package Manager，它们的 Package.swift 里写：
+  //   .package(url: ".../capacitor-swift-pm.git", from: "8.0.0")
+  // `from: "8.0.0"` 允许解析到任意 ≥8.0.0 的版本，而 GitHub 上该仓库的 tag
+  // 未必包含 8.5.x 新增的 PluginConfig.getString API，于是插件编译不过。
+  //
+  // 对本项目而言，这些插件本来就是多余的：
+  //   - 启动画面：安卓用 SplashScreen 主题背景色即可，不必装插件
+  //   - 状态栏：网页自己会渲染，无需干预
+  //   - @capacitor/app：我们没用到返回键事件（返回键已在 MainActivity 用 Java 处理）
+  //
+  // 结论：只依赖 Capacitor 核心，不引入任何插件 —— 编译最稳，行为最可预期。
+  // ---------------------------------------------------------------------------
 };
 
 export default config;
